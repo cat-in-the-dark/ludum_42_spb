@@ -3,115 +3,161 @@
       -- desc:   short description
 -- script: lua
 
+T=8
+
 Player = {
   x=0,
   y=0,
+  cr={x=0,y=0,w=8,h=16},
   vx=0,
   vy=0,
   rigid=true,
-  mass=true
+  mass=true,
+  sp={{256},{272}}
 }
+
+function drawEnt(e)
+  for i,t in ipairs(e.sp) do
+    for j,v in ipairs(t) do
+      spr(v, e.x+(j-1)*T, e.y+(i-1)*T, 0)
+    end
+  end
+end
+
+function vec2(xV, yV)
+  return {x=xV,y=yV}
+end
+
+function v2mul(v, s)
+  return vec2(v.x*s, v.y*s)
+end
+
+function v2div(v,s)
+  return vec2(v.x/s, v.y/s)
+end
+
+function v2add(v1, v2)
+  return vec2(v1.x+v2.x,v1.y+v2.y)
+end
+
+function v2len(v)
+  return math.ceil(math.sqrt(v.x*v.x + v.y*v.y))
+end
+
+function sign(x)
+  return x>0 and 1 or x<0 and -1 or 0
+end
 
 BTN_UP = 0
 BTN_LEFT = 2
 BTN_RIGHT = 3
 
-JMP_IMP = 2.5
+JMP_IMP = 3
 ACCEL = 0.2
 
 transparent_sprites_index = 0
 solid_sprites_index = 80
 
-function is_solid(x, y)
-  return (mget(x//8, y//8) >= solid_sprites_index)
+function IsTileSolid(x, y)
+  return (mget(x, y) >= solid_sprites_index)
 end
 
 function init()
-  
 end
 
-function onGround(e)
-  -- TODO: support different collide rects
-  return is_solid(e.x,e.y+e.vy+8) or is_solid(e.x+7,e.y+e.vy+8)
-end
-
-function underGround(e)
-  return is_solid(e.x,e.y+e.vy) or is_solid(e.x+7,e.y+e.vy)
-end
-
-function atLeft(e)
-  return is_solid(e.x+e.vx,e.y) or is_solid(e.x+e.vx,e.y+7)
-end
-
-function atRight(e)
-  return is_solid(e.x+e.vx+8,e.y) or is_solid(e.x+e.vx+8,e.y+7)
-end
-
-function groundPos(e)
-  return (e.y+e.vy)//8 * 8
-end
-
-function ceilingPos(e)
-  return ((e.y+e.vy)//8+1)*8
-end
-
-function lWallPos(e)
-  return ((e.x+e.vx)//8+1)*8
-end
-
-function rWallPos(e)
-  return (e.x+e.vx)//8*8
-end
-
-function handleInput(e)
+function handleInput()
+  local iv={pos=vec2(0,0), jump=false}
   if btn(BTN_LEFT) then
-    e.vx = -1
+    iv.pos.x = -1
   elseif btn(BTN_RIGHT) then
-    e.vx = 1
+    iv.pos.x = 1
+  end
+  if btn(BTN_UP) then
+    iv.jump=true
+  end
+  return iv
+end
+
+function CanMove(dp,cr)
+  local x1 = dp.x + cr.x
+  local y1 = dp.y + cr.y
+  local x2 = x1 + cr.w - 1
+  local y2 = y1 + cr.h - 1
+  -- check all tiles touched by the rect
+  local startC = x1 // T
+  local endC = x2 // T
+  local startR = y1 // T
+  local endR = y2 // T
+  -- print(string.format("%d %d %d %d", startC, endC, startR, endR), 0, 0, 4)
+  for c = startC, endC do
+    for r = startR, endR do
+      if IsTileSolid(c, r) then
+        return false
+      end
+    end
+  end
+  return true
+end
+
+function isOnFloor(e)
+  return not CanMove(vec2(e.x,e.y+1),e.cr)
+end
+
+function TryMoveBy(e,dp)
+  local pos=vec2(e.x, e.y)
+  CM = ""
+  if (e.rigid) then
+    if dp.x ~= 0 then
+      for i=dp.x,sign(dp.x),-1*sign(dp.x) do
+        if CanMove(vec2(e.x+i,e.y),e.cr) then
+          e.x=e.x+i
+          break
+        end
+      end
+    end
+    if dp.y ~= 0 then
+      if CanMove(vec2(e.x,e.y+dp.y),e.cr) then
+        e.y=e.y+dp.y
+      else
+        moveby=0
+        for i=0,math.ceil(dp.y),sign(dp.y) do
+          if CanMove(vec2(e.x,e.y+i),e.cr) then
+            moveby=i
+          else
+            break
+          end
+        end
+        e.y=e.y+moveby
+      end
+    end
   else
-    e.vx = 0
-  end
-  if btn(BTN_UP) and onGround(e) then
-    e.vy = -JMP_IMP
+    e.x=e.x+dp.x
+    e.y=e.y+dp.y
   end
 end
 
-function update(entity)
-  if (entity.mass) then
-    entity.vy = entity.vy + ACCEL
-  end
-
-  str = ""
-
-  if (entity.rigid) then
-    if (onGround(entity)) then
-      str = str .. "OG"
-      entity.vy = groundPos(entity) - entity.y
-    end
-    if (underGround(entity)) then
-      str = str .. "UG"
-      entity.vy = ceilingPos(entity) - entity.y
-    end
-    if (atLeft(entity)) then
-      str = str .. "AL"
-      entity.vx = lWallPos(entity) - entity.x
-    end
-    if atRight(entity) then
-      str = str .. "AR"
-      entity.vx = rWallPos(entity) - entity.x
+function update(e)
+  local iv=handleInput()
+  if (e.mass) then
+    if isOnFloor(e) then
+      if iv.jump then
+        e.vy=-1*JMP_IMP
+      else
+        e.vy=0
+      end
+    else
+      e.vy = e.vy + ACCEL
     end
   end
-
-  print (str, 0, 0)
-
-  entity.x = entity.x + entity.vx
-  entity.y = entity.y + entity.vy
+  local dp=v2add(iv.pos,vec2(e.vx, e.vy))
+  TryMoveBy(e,dp)
 end
 
+-- init()
 function TIC()
   cls()
   map()
-  handleInput(Player)
   update(Player)
-  rect(Player.x, Player.y, 8, 8, 15)
+  print(string.format("%f", Player.y), 0, 0, 4)
+  drawEnt(Player)
 end
