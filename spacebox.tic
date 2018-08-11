@@ -1,0 +1,117 @@
+-- title:  game title
+-- author: game developer
+      -- desc:   short description
+-- script: lua
+
+Player = {
+  x=0,
+  y=0,
+  vx=0,
+  vy=0,
+  rigid=true,
+  mass=true
+}
+
+BTN_UP = 0
+BTN_LEFT = 2
+BTN_RIGHT = 3
+
+JMP_IMP = 2.5
+ACCEL = 0.2
+
+transparent_sprites_index = 0
+solid_sprites_index = 80
+
+function is_solid(x, y)
+  return (mget(x//8, y//8) >= solid_sprites_index)
+end
+
+function init()
+  
+end
+
+function onGround(e)
+  -- TODO: support different collide rects
+  return is_solid(e.x,e.y+e.vy+8) or is_solid(e.x+7,e.y+e.vy+8)
+end
+
+function underGround(e)
+  return is_solid(e.x,e.y+e.vy) or is_solid(e.x+7,e.y+e.vy)
+end
+
+function atLeft(e)
+  return is_solid(e.x+e.vx,e.y) or is_solid(e.x+e.vx,e.y+7)
+end
+
+function atRight(e)
+  return is_solid(e.x+e.vx+8,e.y) or is_solid(e.x+e.vx+8,e.y+7)
+end
+
+function groundPos(e)
+  return (e.y+e.vy)//8 * 8
+end
+
+function ceilingPos(e)
+  return ((e.y+e.vy)//8+1)*8
+end
+
+function lWallPos(e)
+  return ((e.x+e.vx)//8+1)*8
+end
+
+function rWallPos(e)
+  return (e.x+e.vx)//8*8
+end
+
+function handleInput(e)
+  if btn(BTN_LEFT) then
+    e.vx = -1
+  elseif btn(BTN_RIGHT) then
+    e.vx = 1
+  else
+    e.vx = 0
+  end
+  if btn(BTN_UP) and onGround(e) then
+    e.vy = -JMP_IMP
+  end
+end
+
+function update(entity)
+  if (entity.mass) then
+    entity.vy = entity.vy + ACCEL
+  end
+
+  str = ""
+
+  if (entity.rigid) then
+    if (onGround(entity)) then
+      str = str .. "OG"
+      entity.vy = groundPos(entity) - entity.y
+    end
+    if (underGround(entity)) then
+      str = str .. "UG"
+      entity.vy = ceilingPos(entity) - entity.y
+    end
+    if (atLeft(entity)) then
+      str = str .. "AL"
+      entity.vx = lWallPos(entity) - entity.x
+    end
+    if atRight(entity) then
+      str = str .. "AR"
+      entity.vx = rWallPos(entity) - entity.x
+    end
+  end
+
+  print (str, 0, 0)
+
+  entity.x = entity.x + entity.vx
+  entity.y = entity.y + entity.vy
+end
+
+function TIC()
+  cls()
+  map()
+  handleInput(Player)
+  update(Player)
+  rect(Player.x, Player.y, 8, 8, 15)
+end
