@@ -4,6 +4,8 @@
 -- script: lua
 
 T=8
+W=240
+H=136
 
 Player = {
   x=0,
@@ -24,14 +26,33 @@ SpikeTex = {
   R=308
 }
 
-LeftSpikes = {
+function deepcopy(orig)
+    local orig_type = type(orig)
+    local copy
+    if orig_type == 'table' then
+        copy = {}
+        for orig_key, orig_value in next, orig, nil do
+            copy[deepcopy(orig_key)] = deepcopy(orig_value)
+        end
+        setmetatable(copy, deepcopy(getmetatable(orig)))
+    else -- number, string, boolean, etc
+        copy = orig
+    end
+    return copy
+end
+
+LSpikes = {
   x=0,
   y=0,
-  cr={x=0,y=0,w=120,h=136},
+  cr={x=0,y=0,w=240,h=136},
   rigid=false,
   mass=false,
   sp={}
 }
+
+RSpikes = deepcopy(LSpikes)
+USpikes = deepcopy(LSpikes)
+DSpikes = deepcopy(LSpikes)
 
 function drawEnt(e)
   local i=1
@@ -179,18 +200,27 @@ function update(e)
   TryMoveBy(e,dp)
 end
 
-function fillSpikeWalls()
-  for i=1,(136/T) do
-    LeftSpikes.sp[i]={}
-    for j=1,(120/T-1) do
-      LeftSpikes.sp[i][j]=SpikeTex.C
+function fillRect(e,x0,y0,w,h,tex)
+  if e.sp == nil then e.sp = {} end
+  for i=y0,h do
+    if e.sp[i] == nil then e.sp[i]={} end
+    for j=x0,w do
+      e.sp[i][j]=tex
     end
-    LeftSpikes.sp[i][120/T]=SpikeTex.L
   end
 end
 
 function init()
-  fillSpikeWalls()
+  local cw = W//T
+  local ch = H//T
+  fillRect(LSpikes,1,1,cw,ch,SpikeTex.C)
+  fillRect(RSpikes,1,1,cw,ch,SpikeTex.C)
+  fillRect(USpikes,1,1,cw,ch,SpikeTex.C)
+  fillRect(DSpikes,1,1,cw,ch,SpikeTex.C)
+  fillRect(LSpikes,cw,1,cw,ch,SpikeTex.L)
+  fillRect(RSpikes,1,1,1,ch,SpikeTex.R)
+  fillRect(USpikes,1,ch,cw,ch,SpikeTex.U)
+  fillRect(DSpikes,1,1,cw,1,SpikeTex.D)
   Player.x=130
 end
 
@@ -201,8 +231,8 @@ function TIC()
   update(Player)
   print(string.format("%f", Player.y), 0, 0, 4)
   drawEnt(Player)
-  drawEnt(LeftSpikes)
+  drawEnt(DSpikes)
   str = ""
-  if collide(Player, LeftSpikes) then str=str.."COLL" end
+  if collide(Player, LSpikes) then str=str.."COLL" end
   print(str, 130, 0, 4)
 end
