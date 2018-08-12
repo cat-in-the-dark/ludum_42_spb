@@ -216,6 +216,10 @@ function updateCam(cam,e)
   cam.y=math.min(H//2,H//2-e.y)
 end
 
+function updateSpikes()
+  LSpikes.x = LSpikes.x + 1
+end
+
 function init()
   local cw = W//T
   local ch = H//T
@@ -228,16 +232,36 @@ function init()
   fillRect(USpikes,1,ch,cw,ch,SpikeTex.U)
   fillRect(DSpikes,1,1,cw,1,SpikeTex.D)
   Player.x=130
+  LSpikes.x=-240
 end
 
-init()
-function TIC()
+function TICFail()
+  cls()
+  print("Game over!", W/2-40, H/2, 4)
+end
+
+function TICGame()
   cls()
   updateCam(cam,Player)
   map(0,0,W,H,cam.x,cam.y)
   update(Player)
+  updateSpikes()
   drawEnt(Player,cam)
   print(string.format("%g %g %g %g", cam.x, cam.y, Player.x, Player.y), 0, 0, 4)
-  -- drawEnt(DSpikes)
-  -- if collide(Player, LSpikes) then str=str.."COLL" end
+  drawEnt(LSpikes,cam)
+  if collide(Player, LSpikes) then mode=MOD_FAIL end
+end
+
+MOD_GAME = 0
+MOD_FAIL = 1
+
+TICMode={
+  [MOD_GAME]=TICGame,
+  [MOD_FAIL]=TICFail
+}
+
+init()
+mode=MOD_GAME
+function TIC()
+  TICMode[mode]()
 end
