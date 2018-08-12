@@ -18,6 +18,8 @@ Player = {
   sp={{256},{272}}
 }
 
+cam={x=W//2,y=H//2}
+
 SpikeTex = {
   C=304,
   L=305,
@@ -54,11 +56,11 @@ RSpikes = deepcopy(LSpikes)
 USpikes = deepcopy(LSpikes)
 DSpikes = deepcopy(LSpikes)
 
-function drawEnt(e)
+function drawEnt(e,cam)
   local i=1
   for i,t in ipairs(e.sp) do
     for j,v in ipairs(t) do
-      spr(v, e.x+(j-1)*T, e.y+(i-1)*T, 0)
+      spr(v, e.x+(j-1)*T+cam.x, e.y+(i-1)*T+cam.y, 0)
     end
   end
 end
@@ -83,9 +85,8 @@ function v2len(v)
   return math.ceil(math.sqrt(v.x*v.x + v.y*v.y))
 end
 
-function sign(x)
-  return x>0 and 1 or x<0 and -1 or 0
-end
+function sign(x) return x>0 and 1 or x<0 and -1 or 0 end
+function lerp(a,b,t) return (1-t)*a + t*b end
 
 BTN_UP = 0
 BTN_LEFT = 2
@@ -210,6 +211,11 @@ function fillRect(e,x0,y0,w,h,tex)
   end
 end
 
+function updateCam(cam,e)
+  cam.x=math.min(W//2,W//2-e.x)
+  cam.y=math.min(H//2,H//2-e.y)
+end
+
 function init()
   local cw = W//T
   local ch = H//T
@@ -227,12 +233,11 @@ end
 init()
 function TIC()
   cls()
-  map()
+  updateCam(cam,Player)
+  map(0,0,W,H,cam.x,cam.y)
   update(Player)
-  print(string.format("%f", Player.y), 0, 0, 4)
-  drawEnt(Player)
-  drawEnt(DSpikes)
-  str = ""
-  if collide(Player, LSpikes) then str=str.."COLL" end
-  print(str, 130, 0, 4)
+  drawEnt(Player,cam)
+  print(string.format("%g %g %g %g", cam.x, cam.y, Player.x, Player.y), 0, 0, 4)
+  -- drawEnt(DSpikes)
+  -- if collide(Player, LSpikes) then str=str.."COLL" end
 end
