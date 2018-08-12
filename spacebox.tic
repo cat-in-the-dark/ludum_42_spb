@@ -16,7 +16,25 @@ Player = {
   sp={{256},{272}}
 }
 
+SpikeTex = {
+  C=304,
+  L=305,
+  U=306,
+  D=307,
+  R=308
+}
+
+LeftSpikes = {
+  x=0,
+  y=0,
+  cr={x=0,y=0,w=120,h=136},
+  rigid=false,
+  mass=false,
+  sp={}
+}
+
 function drawEnt(e)
+  local i=1
   for i,t in ipairs(e.sp) do
     for j,v in ipairs(t) do
       spr(v, e.x+(j-1)*T, e.y+(i-1)*T, 0)
@@ -62,7 +80,9 @@ function IsTileSolid(x, y)
   return (mget(x, y) >= solid_sprites_index)
 end
 
-function init()
+function collide(e1,e2)
+  return (e1.x < e2.x+e2.cr.w and e2.x < e1.x + e1.cr.w) and
+    (e1.y < e2.y+e2.cr.h and e2.y < e1.y+e1.cr.h)
 end
 
 function handleInput()
@@ -101,6 +121,10 @@ end
 
 function isOnFloor(e)
   return not CanMove(vec2(e.x,e.y+1),e.cr)
+end
+
+function isUnderCeiling(e)
+  return not CanMove(vec2(e.x,e.y-1),e.cr)
 end
 
 function TryMoveBy(e,dp)
@@ -145,6 +169,8 @@ function update(e)
       else
         e.vy=0
       end
+    elseif isUnderCeiling(e) and e.vy < 0 then
+      e.vy=0
     else
       e.vy = e.vy + ACCEL
     end
@@ -153,11 +179,30 @@ function update(e)
   TryMoveBy(e,dp)
 end
 
--- init()
+function fillSpikeWalls()
+  for i=1,(136/T) do
+    LeftSpikes.sp[i]={}
+    for j=1,(120/T-1) do
+      LeftSpikes.sp[i][j]=SpikeTex.C
+    end
+    LeftSpikes.sp[i][120/T]=SpikeTex.L
+  end
+end
+
+function init()
+  fillSpikeWalls()
+  Player.x=130
+end
+
+init()
 function TIC()
   cls()
   map()
   update(Player)
   print(string.format("%f", Player.y), 0, 0, 4)
   drawEnt(Player)
+  drawEnt(LeftSpikes)
+  str = ""
+  if collide(Player, LeftSpikes) then str=str.."COLL" end
+  print(str, 130, 0, 4)
 end
