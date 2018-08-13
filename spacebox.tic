@@ -46,10 +46,19 @@ end
 LSpikes = {
   x=0,
   y=0,
+  vx=0,
+  vy=0,
   cr={x=0,y=0,w=240,h=136},
   rigid=false,
   mass=false,
   sp={}
+}
+
+Flag = {
+  x=16,
+  y=192,
+  cr={x=0,y=0,w=8,h=48},
+  sp={{6,1},{22,23},{38,39},{54,1},{54,1},{54,1}}
 }
 
 RSpikes = deepcopy(LSpikes)
@@ -97,9 +106,26 @@ ACCEL = 0.2
 
 transparent_sprites_index = 0
 solid_sprites_index = 80
+bonus_index = 112
+
+function isTileRemovable(tile)
+    return tile == 82 or tile == 83
+end
+
+function isTileBouns(x,y)
+  return mget(x,y) >= bonus_index
+end
 
 function IsTileSolid(x, y)
-  return (mget(x, y) >= solid_sprites_index)
+  tileId = mget(x, y)
+  if triggerBonus and isTileRemovable(tileId) then
+    return false
+  end
+  return (tileId >= solid_sprites_index)
+end
+
+function getMapRange()
+  return triggerBonus and 34 or 17
 end
 
 function collide(e1,e2)
@@ -131,9 +157,14 @@ function CanMove(dp,cr)
   local startR = y1 // T
   local endR = y2 // T
   -- print(string.format("%d %d %d %d", startC, endC, startR, endR), 0, 0, 4)
+  if startR > mapRange then return true end
   for c = startC, endC do
     for r = startR, endR do
       if IsTileSolid(c, r) then
+        -- TODO: move this to separate check
+        if (isTileBouns(c,r)) then
+          triggerBonus = true
+        end
         return false
       end
     end
@@ -217,7 +248,20 @@ function updateCam(cam,e)
 end
 
 function updateSpikes()
-  LSpikes.x = LSpikes.x + 1
+  LSpikes.x = math.max(LSpikes.x + LSpikes.vx, Player.x-320)
+  if (Player.x > 960) then
+    LSpikes.vx = 0.75 + (0.25 * (Player.x - 960) / 960)
+  else
+    LSpikes.vx = 0.75
+  end
+  if triggerBonus then
+    RSpikes.x = RSpikes.x + RSpikes.vx
+    if (Player.x < 960) then
+      RSpikes.vx = -0.8 + (0.2 * (960-Player.x) / 960)
+    else
+      RSpikes.vx = -0.8
+    end
+  end
 end
 
 function init()
@@ -231,8 +275,11 @@ function init()
   fillRect(RSpikes,1,1,1,ch,SpikeTex.R)
   fillRect(USpikes,1,ch,cw,ch,SpikeTex.U)
   fillRect(DSpikes,1,1,cw,1,SpikeTex.D)
-  Player.x=130
+  Player.x=64
   LSpikes.x=-240
+  RSpikes.y=136
+  RSpikes.x=1920
+  triggerBonus = false
 end
 
 function TICFail()
@@ -240,24 +287,43 @@ function TICFail()
   print("Game over!", W/2-40, H/2, 4)
 end
 
+function TICWin()
+  cls()
+  print("You win!", W/2-32,H/2,4)
+end
+
 function TICGame()
   cls()
   updateCam(cam,Player)
-  map(0,0,W,H,cam.x,cam.y)
+  mapRange = getMapRange()
+  map(0,0,W,mapRange + 34,cam.x,cam.y,-1,1, function(tile, x, y)
+    if isTileRemovable(tile) and triggerBonus then
+      return 1
+    elseif y > mapRange then
+      return 1
+    end
+    return tile
+  end)
   update(Player)
   updateSpikes()
   drawEnt(Player,cam)
   print(string.format("%g %g %g %g", cam.x, cam.y, Player.x, Player.y), 0, 0, 4)
   drawEnt(LSpikes,cam)
+  drawEnt(RSpikes,cam)
   if collide(Player, LSpikes) then mode=MOD_FAIL end
+  if collide(Player, RSpikes) then mode=MOD_FAIL end
+  if collide(Player, Flag) then mode=MOD_WIN end
+  if Player.y//T > mapRange + 17 then mode=MOD_FAIL end
 end
 
 MOD_GAME = 0
 MOD_FAIL = 1
+MOD_WIN=2
 
 TICMode={
   [MOD_GAME]=TICGame,
-  [MOD_FAIL]=TICFail
+  [MOD_FAIL]=TICFail,
+  [MOD_WIN]=TICWin
 }
 
 init()
