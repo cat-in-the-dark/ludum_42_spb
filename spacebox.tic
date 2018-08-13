@@ -158,23 +158,29 @@ end
 SPIKES={
   [TD.U]={e=DSpikes,x=0,y=H,vx=0,vy=-1},
   [TD.D]={e=USpikes,x=0,y=-H,vx=0,vy=1},
-  [TD.L]={e=RSpikes,x=W,y=0,vx=-1,vy=0},
-  [TD.R]={e=LSpikes,x=-W,y=0,vx=1,vy=0}
+  [TD.L]={e=RSpikes,x=W+16,y=0,vx=-1,vy=0},
+  [TD.R]={e=LSpikes,x=-W-16,y=0,vx=1,vy=0}
 }
 
 speedMulX=0.5
 speedMulY=0.3
 RoomCount=0
 
-function onChangeRoom(e,ccrx,ccry)
+function resetSP(sp,x,y)
+  sp.e.x=sp.x+x*8
+  sp.e.y=sp.y+y*8
+  sp.e.vx=sp.vx * speedMulX
+  sp.e.vy=sp.vy * speedMulY
+end
+
+function onChangeRoom(e,x,y)
   bonusDir=0
   local dir=getSpWallDirInRoom(e)
   if dir == 0 then return end
-  local sp=SPIKES[dir]
-  sp.e.x=sp.x+ccrx*8
-  sp.e.y=sp.y+ccry*8
-  sp.e.vx=sp.vx * speedMulX
-  sp.e.vy=sp.vy * speedMulY
+  resetSP(SPIKES[TD.U],x,y)
+  resetSP(SPIKES[TD.D],x,y)
+  resetSP(SPIKES[TD.L],x,y)
+  resetSP(SPIKES[TD.R],x,y)
   RoomCount=RoomCount+1
 end
 
@@ -394,19 +400,23 @@ function init()
   fillRect(RSpikes,1,1,1,ch,SpikeTex.R)
   fillRect(USpikes,1,ch,cw,ch,SpikeTex.U)
   fillRect(DSpikes,1,1,cw,1,SpikeTex.D)
-  Player.x=64
-  Player.y=20
+  Player.x=8*8
+  Player.y=4*8
   spikeDir=0
 end
 
 function TICFail()
   cls()
   print("Game over!", W/2-40, H/2, 4)
+  print("-Press Z to restart!-", W/2-64, H/2+16, 4)
+  if btn(4) then reset() end
 end
 
 function TICWin()
   cls()
   print("You win!", W/2-32,H/2,4)
+  print("-Press Z to restart-", W/2-64, H/2+16, 4)
+  if btn(4) then reset() end
 end
 
 function TICGame()
