@@ -6,6 +6,7 @@
 T=8
 W=240
 H=136
+EMPTY_TILE_ID=1
 
 Player = {
   x=0,
@@ -43,6 +44,15 @@ function deepcopy(orig)
     return copy
 end
 
+local function has_value (tab, val)
+  for index, value in ipairs(tab) do
+    if value == val then
+      return true
+    end
+  end
+  return false
+end
+
 LSpikes = {
   x=0,
   y=0,
@@ -54,16 +64,16 @@ LSpikes = {
   sp={}
 }
 
+RSpikes = deepcopy(LSpikes)
+USpikes = deepcopy(LSpikes)
+DSpikes = deepcopy(LSpikes)
+
 Flag = {
   x=16,
   y=192,
   cr={x=0,y=0,w=8,h=48},
   sp={{6,1},{22,23},{38,39},{54,1},{54,1},{54,1}}
 }
-
-RSpikes = deepcopy(LSpikes)
-USpikes = deepcopy(LSpikes)
-DSpikes = deepcopy(LSpikes)
 
 function drawEnt(e,cam)
   local i=1
@@ -107,25 +117,58 @@ ACCEL = 0.2
 transparent_sprites_index = 0
 solid_sprites_index = 80
 bonus_index = 112
+bonusExpired=116
+spikeFirst=48
+spikeLast=51
 
-function isTileRemovable(tile)
-    return tile == 82 or tile == 83
+-- tile direction
+TD={
+  U=1,
+  D=2,
+  L=3,
+  R=4
+}
+
+BONUS_DIRS={
+  [112]=TD.D,
+  [113]=TD.L,
+  [114]=TD.U,
+  [115]=TD.R
+}
+
+bonusDir=0
+
+function getBonusDir(c,r)
+  return BONUS_DIRS[mget(c,r)]
 end
 
-function isTileBouns(x,y)
-  return mget(x,y) >= bonus_index
+REM_TILE_DIRS={
+  [TD.D]={82,83},
+  [TD.L]={84,85},
+  [TD.U]={86,87},
+  [TD.R]={88,89}
+}
+
+function isTileRemovable(tileId)
+  if bonusDir == 0 then return false end
+  return has_value(REM_TILE_DIRS[bonusDir], tileId)
+end
+
+function isTileBonus(x,y)
+  return bonus_index <= mget(x,y) and mget(x,y) < bonusExpired
+end
+
+function isTileSpike(c,r)
+  id=mget(c,r)
+  return id>=spikeFirst and id <=spikeLast
 end
 
 function IsTileSolid(x, y)
   tileId = mget(x, y)
-  if triggerBonus and isTileRemovable(tileId) then
+  if isTileRemovable(tileId) then
     return false
   end
   return (tileId >= solid_sprites_index)
-end
-
-function getMapRange()
-  return triggerBonus and 34 or 17
 end
 
 function collide(e1,e2)
@@ -146,7 +189,8 @@ function handleInput()
   return iv
 end
 
-function CanMove(dp,cr)
+--callback(c,r)
+function collideTile(dp,cr,callback)
   local x1 = dp.x + cr.x
   local y1 = dp.y + cr.y
   local x2 = x1 + cr.w - 1
@@ -157,19 +201,30 @@ function CanMove(dp,cr)
   local startR = y1 // T
   local endR = y2 // T
   -- print(string.format("%d %d %d %d", startC, endC, startR, endR), 0, 0, 4)
-  if startR > mapRange then return true end
   for c = startC, endC do
     for r = startR, endR do
-      if IsTileSolid(c, r) then
-        -- TODO: move this to separate check
-        if (isTileBouns(c,r)) then
-          triggerBonus = true
-        end
-        return false
-      end
+      callback(c,r)
     end
   end
-  return true
+end
+
+function CanMove(dp,cr)
+  local cm=true
+  collideTile(dp,cr, function(c,r)
+    if IsTileSolid(c, r) then
+      cm=false
+      return
+    end
+  end)
+  return cm
+end
+
+function checkHitBonus(e)
+  collideTile(vec2(e.x,e.y+e.vy),e.cr,function(c,r)
+    if isTileBonus(c,r) and bonusDir == 0 then
+      bonusDir = getBonusDir(c,r)
+    end
+  end)
 end
 
 function isOnFloor(e)
@@ -178,6 +233,16 @@ end
 
 function isUnderCeiling(e)
   return not CanMove(vec2(e.x,e.y-1),e.cr)
+end
+
+function isTouchSpikeTiles(e)
+  ts=false
+  collideTile(vec2(e.x,e.y),e.cr,function(c,r)
+    if isTileSpike(c,r) then
+      ts=true
+    end
+  end)
+  return ts
 end
 
 function TryMoveBy(e,dp)
@@ -229,6 +294,7 @@ function update(e)
     end
   end
   local dp=v2add(iv.pos,vec2(e.vx, e.vy))
+  checkHitBonus(e)
   TryMoveBy(e,dp)
 end
 
@@ -254,14 +320,6 @@ function updateSpikes()
   else
     LSpikes.vx = 0.75
   end
-  if triggerBonus then
-    RSpikes.x = RSpikes.x + RSpikes.vx
-    if (Player.x < 960) then
-      RSpikes.vx = -0.8 + (0.2 * (960-Player.x) / 960)
-    else
-      RSpikes.vx = -0.8
-    end
-  end
 end
 
 function init()
@@ -279,7 +337,6 @@ function init()
   LSpikes.x=-240
   RSpikes.y=136
   RSpikes.x=1920
-  triggerBonus = false
 end
 
 function TICFail()
@@ -295,25 +352,27 @@ end
 function TICGame()
   cls()
   updateCam(cam,Player)
-  mapRange = getMapRange()
-  map(0,0,W,mapRange + 34,cam.x,cam.y,-1,1, function(tile, x, y)
-    if isTileRemovable(tile) and triggerBonus then
-      return 1
-    elseif y > mapRange then
-      return 1
+  cx,cy=Player.x//240*30,Player.y//136*17
+  map(cx,cy,30,17,cx*8+cam.x,cy*8+cam.y,-1,1, function(tile, x, y)
+    -- trace(string.format("%d %d", x, y))
+    if isTileRemovable(tile) then
+      return EMPTY_TILE_ID
+    end
+    if (bonusDir ~= 0) and isTileBonus(x,y) then
+      return bonusExpired
     end
     return tile
   end)
   update(Player)
-  updateSpikes()
+  -- updateSpikes()
   drawEnt(Player,cam)
-  print(string.format("%g %g %g %g", cam.x, cam.y, Player.x, Player.y), 0, 0, 4)
+  print(string.format("%g %g %g %g, %g %g", cam.x, cam.y, Player.x, Player.y, Player.x+cam.x, Player.y+cam.y), 0, 0, 4)
   drawEnt(LSpikes,cam)
   drawEnt(RSpikes,cam)
   if collide(Player, LSpikes) then mode=MOD_FAIL end
   if collide(Player, RSpikes) then mode=MOD_FAIL end
+  if isTouchSpikeTiles(Player) then mode=MOD_FAIL end
   if collide(Player, Flag) then mode=MOD_WIN end
-  if Player.y//T > mapRange + 17 then mode=MOD_FAIL end
 end
 
 MOD_GAME = 0
