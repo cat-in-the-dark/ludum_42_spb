@@ -61,10 +61,7 @@ LSpikes = {
   cr={x=0,y=0,w=240,h=136},
   rigid=false,
   mass=false,
-  sp={},
-  init=function (this)
-    -- body
-  end
+  sp={}
 }
 
 RSpikes = deepcopy(LSpikes)
@@ -443,7 +440,7 @@ function TICGame()
     drawEnt(s,cam)
   end
   drawEnt(Player,cam)
-  print(string.format("%g %g %g %g, %g %g| %g", cam.x, cam.y, Player.x, Player.y, Player.x+cam.x, Player.y+cam.y, getSpWallDirInRoom(Player)), 0, 0, 4)
+  -- print(string.format("%g %g %g %g, %g %g| %g", cam.x, cam.y, Player.x, Player.y, Player.x+cam.x, Player.y+cam.y, getSpWallDirInRoom(Player)), 0, 0, 4)
   if isTouchSpikeTiles(Player) then mode=MOD_FAIL end
   if collide(Player, Flag) then mode=MOD_WIN end
 end
