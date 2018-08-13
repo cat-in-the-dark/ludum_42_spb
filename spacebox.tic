@@ -178,12 +178,19 @@ function onChangeRoom(e,ccrx,ccry)
   RoomCount=RoomCount+1
 end
 
+function diffRoom(x,y)
+  return x ~= crx or y ~= cry
+end
+
 crx,cry=-1,-1
 function checkChangeRoom(e)
-  local ccrx,ccry=getCurrentRoom(e.x,e.y)
-  if ccrx ~= crx or ccry ~= cry then
-    onChangeRoom(e,ccrx,ccry)
-    crx,cry=ccrx,ccry
+  local x1,y1=getCurrentRoom(e.x,e.y)
+  local x2,y2=getCurrentRoom(e.x+e.cr.w,e.y)
+  local x3,y3=getCurrentRoom(e.x,e.y+e.cr.h)
+  local x4,y4=getCurrentRoom(e.x+e.cr.w,e.y+e.cr.h)
+  if diffRoom(x1,y1) and diffRoom(x2,y2) and diffRoom(x3,y3) and diffRoom(x4,y4) then
+    onChangeRoom(e,x1,y1)
+    crx,cry=x1,y1
   end
 end
 
@@ -278,7 +285,7 @@ function CanMove(dp,cr)
 end
 
 function checkHitBonus(e)
-  collideTile(vec2(e.x,e.y+e.vy),e.cr,function(c,r)
+  collideTile(vec2(e.x,e.y-1),e.cr,function(c,r)
     if isTileBonus(c,r) and bonusDir == 0 then
       bonusDir = getBonusDir(c,r)
     end
@@ -388,6 +395,7 @@ function init()
   fillRect(USpikes,1,ch,cw,ch,SpikeTex.U)
   fillRect(DSpikes,1,1,cw,1,SpikeTex.D)
   Player.x=64
+  Player.y=20
   spikeDir=0
 end
 
