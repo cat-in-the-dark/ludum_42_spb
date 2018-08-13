@@ -61,7 +61,10 @@ LSpikes = {
   cr={x=0,y=0,w=240,h=136},
   rigid=false,
   mass=false,
-  sp={}
+  sp={},
+  init=function (this)
+    -- body
+  end
 }
 
 RSpikes = deepcopy(LSpikes)
@@ -128,6 +131,61 @@ TD={
   L=3,
   R=4
 }
+
+SPIKE_WALL_DIRS={
+  [2]=TD.D,
+  [3]=TD.L,
+  [4]=TD.U,
+  [5]=TD.R
+}
+SP_WALL_DIR_TILE_OFFSET = vec2(2,2)
+
+function isTileSpikeDirFlag(tileId)
+  return tileId >= 2 and tileId <= 5
+end
+
+function getCurrentRoom(x,y)
+  return x//240*30,y//136*17
+end
+
+function getSpWallDirInRoom(e)
+  local cx,cy=getCurrentRoom(e.x,e.y)
+  local off=SP_WALL_DIR_TILE_OFFSET
+  local tile = mget(cx+off.x,cy+off.y)
+  return isTileSpikeDirFlag(tile) and SPIKE_WALL_DIRS[tile] or 0
+end
+
+SPIKES={
+  [TD.U]={e=DSpikes,x=0,y=H,vx=0,vy=-1},
+  [TD.D]={e=USpikes,x=0,y=-H,vx=0,vy=1},
+  [TD.L]={e=RSpikes,x=W,y=0,vx=-1,vy=0},
+  [TD.R]={e=LSpikes,x=-W,y=0,vx=1,vy=0}
+}
+
+speedMulX=0.5
+speedMulY=0.3
+RoomCount=0
+
+function onChangeRoom(e,ccrx,ccry)
+  bonusDir=0
+  local dir=getSpWallDirInRoom(e)
+  if dir == 0 then return end
+  local sp=SPIKES[dir]
+  sp.e.x=sp.x+ccrx*8
+  sp.e.y=sp.y+ccry*8
+  sp.e.vx=sp.vx * speedMulX
+  sp.e.vy=sp.vy * speedMulY
+  RoomCount=RoomCount+1
+end
+
+crx,cry=-1,-1
+function checkChangeRoom(e)
+  local ccrx,ccry=getCurrentRoom(e.x,e.y)
+  if ccrx ~= crx or ccry ~= cry then
+    onChangeRoom(e,ccrx,ccry)
+    crx,cry=ccrx,ccry
+  end
+end
 
 BONUS_DIRS={
   [112]=TD.D,
@@ -313,13 +371,9 @@ function updateCam(cam,e)
   cam.y=math.min(H//2,H//2-e.y)
 end
 
-function updateSpikes()
-  LSpikes.x = math.max(LSpikes.x + LSpikes.vx, Player.x-320)
-  if (Player.x > 960) then
-    LSpikes.vx = 0.75 + (0.25 * (Player.x - 960) / 960)
-  else
-    LSpikes.vx = 0.75
-  end
+function updateSpikes(s)
+  if math.abs(s.x)-0.2 >= 0 then s.x=s.x+s.vx end
+  if math.abs(s.y)-0.2 >= 0 then s.y=s.y+s.vy end
 end
 
 function init()
@@ -334,9 +388,7 @@ function init()
   fillRect(USpikes,1,ch,cw,ch,SpikeTex.U)
   fillRect(DSpikes,1,1,cw,1,SpikeTex.D)
   Player.x=64
-  LSpikes.x=-240
-  RSpikes.y=136
-  RSpikes.x=1920
+  spikeDir=0
 end
 
 function TICFail()
@@ -352,7 +404,7 @@ end
 function TICGame()
   cls()
   updateCam(cam,Player)
-  cx,cy=Player.x//240*30,Player.y//136*17
+  cx,cy=getCurrentRoom(Player.x,Player.y)
   map(cx,cy,30,17,cx*8+cam.x,cy*8+cam.y,-1,1, function(tile, x, y)
     -- trace(string.format("%d %d", x, y))
     if isTileRemovable(tile) then
@@ -364,13 +416,16 @@ function TICGame()
     return tile
   end)
   update(Player)
-  -- updateSpikes()
+  checkChangeRoom(Player)
+  local dir=getSpWallDirInRoom(Player)
+  if dir ~= 0 then
+    local s=SPIKES[dir].e
+    if collide(Player, s) then mode=MOD_FAIL end
+    updateSpikes(s)
+    drawEnt(s,cam)
+  end
   drawEnt(Player,cam)
-  print(string.format("%g %g %g %g, %g %g", cam.x, cam.y, Player.x, Player.y, Player.x+cam.x, Player.y+cam.y), 0, 0, 4)
-  drawEnt(LSpikes,cam)
-  drawEnt(RSpikes,cam)
-  if collide(Player, LSpikes) then mode=MOD_FAIL end
-  if collide(Player, RSpikes) then mode=MOD_FAIL end
+  print(string.format("%g %g %g %g, %g %g| %g", cam.x, cam.y, Player.x, Player.y, Player.x+cam.x, Player.y+cam.y, getSpWallDirInRoom(Player)), 0, 0, 4)
   if isTouchSpikeTiles(Player) then mode=MOD_FAIL end
   if collide(Player, Flag) then mode=MOD_WIN end
 end
