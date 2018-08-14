@@ -8,6 +8,30 @@ W=240
 H=136
 EMPTY_TILE_ID=1
 
+ST={
+  SL=1,
+  SR=2,
+  RL=3,
+  RR=4,
+  JL=5,
+  JR=6
+}
+
+ANIM_TICK=0
+ANIM_SPEED=0.1
+PL_ANIM={
+  [ST.SL]={{{259},{275}}},
+  [ST.SR]={{{256},{272}}},
+  [ST.RL]={{{260},{276}},{{261},{277}}},
+  [ST.RR]={{{257},{273}},{{258},{274}}},
+  [ST.JL]={{{263},{279}}},
+  [ST.JR]={{{262},{278}}}
+}
+
+function faceRight(state)
+  return state == ST.SR or state == ST.JR or state == ST.RR
+end
+
 Player = {
   x=0,
   y=0,
@@ -16,7 +40,8 @@ Player = {
   vy=0,
   rigid=true,
   mass=true,
-  sp={{256},{272}}
+  state=ST.SR,
+  sp=PL_ANIM[ST.SR][1]
 }
 
 cam={x=W//2,y=H//2}
@@ -361,7 +386,8 @@ function update(e)
       e.vy = e.vy + ACCEL
     end
   end
-  local dp=v2add(iv.pos,vec2(e.vx, e.vy))
+  e.vx=iv.pos.x
+  local dp=vec2(e.vx, e.vy)
   checkHitBonus(e)
   TryMoveBy(e,dp)
 end
@@ -384,6 +410,35 @@ end
 function updateSpikes(s)
   if math.abs(s.x)-0.2 >= 0 then s.x=s.x+s.vx end
   if math.abs(s.y)-0.2 >= 0 then s.y=s.y+s.vy end
+end
+
+-- FFFUUUUU
+function updateState(e)
+  if e.vx > 0 then
+    if isOnFloor(e) then
+      e.state=ST.RR
+    else
+      e.state=ST.JR
+    end
+  elseif e.vx < 0 then
+    if isOnFloor(e) then
+      e.state=ST.RL
+    else
+      e.state=ST.JL
+    end
+  elseif faceRight(e.state) then
+    if isOnFloor(e) then
+      e.state=ST.SR
+    else
+      e.state=ST.JR
+    end
+  else
+    if isOnFloor(e) then
+      e.state=ST.SL
+    else
+      e.state=ST.JL
+    end
+  end
 end
 
 function init()
@@ -431,6 +486,10 @@ function TICGame()
     return tile
   end)
   update(Player)
+  updateState(Player)
+  local anim=PL_ANIM[Player.state]
+  Player.sp=anim[(math.floor(ANIM_TICK)%#anim)+1]
+  ANIM_TICK = ANIM_TICK + ANIM_SPEED
   checkChangeRoom(Player)
   local dir=getSpWallDirInRoom(Player)
   if dir ~= 0 then
