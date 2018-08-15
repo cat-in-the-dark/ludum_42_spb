@@ -7,6 +7,7 @@ T=8
 W=240
 H=136
 EMPTY_TILE_ID=1
+DEBUG_TILES=true
 
 ST={
   SL=1,
@@ -55,18 +56,18 @@ SpikeTex = {
 }
 
 function deepcopy(orig)
-    local orig_type = type(orig)
-    local copy
-    if orig_type == 'table' then
-        copy = {}
-        for orig_key, orig_value in next, orig, nil do
-            copy[deepcopy(orig_key)] = deepcopy(orig_value)
-        end
-        setmetatable(copy, deepcopy(getmetatable(orig)))
-    else -- number, string, boolean, etc
-        copy = orig
+  local orig_type = type(orig)
+  local copy
+  if orig_type == 'table' then
+    copy = {}
+    for orig_key, orig_value in next, orig, nil do
+      copy[deepcopy(orig_key)] = deepcopy(orig_value)
     end
-    return copy
+    setmetatable(copy, deepcopy(getmetatable(orig)))
+  else -- number, string, boolean, etc
+    copy = orig
+  end
+  return copy
 end
 
 local function has_value (tab, val)
@@ -146,6 +147,9 @@ bonusExpired=116
 spikeFirst=48
 spikeLast=51
 
+tileSky=1
+tileBonusCommon=117
+
 -- tile direction
 TD={
   U=1,
@@ -167,11 +171,14 @@ function isTileSpikeDirFlag(tileId)
 end
 
 function getCurrentRoom(x,y)
-  return x//240*30,y//136*17
+  return x//W*30,y//H*17
 end
 
-function getSpWallDirInRoom(e)
-  local cx,cy=getCurrentRoom(e.x,e.y)
+function getEntRoom(e)
+  return getCurrentRoom(e.x,e.y)
+end
+
+function getSpWallDirInRoom(cx,cy)
   local off=SP_WALL_DIR_TILE_OFFSET
   local tile = mget(cx+off.x,cy+off.y)
   return isTileSpikeDirFlag(tile) and SPIKE_WALL_DIRS[tile] or 0
@@ -197,7 +204,7 @@ end
 
 function onChangeRoom(e,x,y)
   bonusDir=0
-  local dir=getSpWallDirInRoom(e)
+  local dir=getSpWallDirInRoom(getEntRoom(e))
   if dir == 0 then return end
   resetSP(SPIKES[TD.U],x,y)
   resetSP(SPIKES[TD.D],x,y)
@@ -243,8 +250,16 @@ REM_TILE_DIRS={
 }
 
 function isTileRemovable(tileId)
-  if bonusDir == 0 then return false end
-  return has_value(REM_TILE_DIRS[bonusDir], tileId)
+  for i,v in ipairs(REM_TILE_DIRS) do
+    for j,w in ipairs(REM_TILE_DIRS[i]) do
+      if w == tileId then return true end
+    end
+  end
+  return false
+end
+
+function isTileRemoved(tileId)
+  return bonusDir ~= 0 and has_value(REM_TILE_DIRS[bonusDir], tileId)
 end
 
 function isTileBonus(x,y)
@@ -258,7 +273,7 @@ end
 
 function IsTileSolid(x, y)
   tileId = mget(x, y)
-  if isTileRemovable(tileId) then
+  if isTileRemoved(tileId) then
     return false
   end
   return (tileId >= solid_sprites_index)
@@ -293,7 +308,6 @@ function collideTile(dp,cr,callback)
   local endC = x2 // T
   local startR = y1 // T
   local endR = y2 // T
-  -- print(string.format("%d %d %d %d", startC, endC, startR, endR), 0, 0, 4)
   for c = startC, endC do
     for r = startR, endR do
       callback(c,r)
@@ -407,9 +421,14 @@ function updateCam(cam,e)
   cam.y=math.min(H//2,H//2-e.y)
 end
 
-function updateSpikes(s)
-  if math.abs(s.x)-0.2 >= 0 then s.x=s.x+s.vx end
-  if math.abs(s.y)-0.2 >= 0 then s.y=s.y+s.vy end
+function updSpikeWall(dir,cam)
+  if dir ~= 0 then
+    local s=SPIKES[dir].e
+    if math.abs(s.x)-0.2 >= 0 then s.x=s.x+s.vx end
+    if math.abs(s.y)-0.2 >= 0 then s.y=s.y+s.vy end
+    drawEnt(s,cam)
+    return s
+  end
 end
 
 -- FFFUUUUU
@@ -455,6 +474,7 @@ function init()
   Player.x=8*8
   Player.y=4*8
   spikeDir=0
+  mode=MOD_GAME
 end
 
 function TICFail()
@@ -471,37 +491,53 @@ function TICWin()
   if btn(4) then reset() end
 end
 
-function TICGame()
-  cls()
-  updateCam(cam,Player)
-  cx,cy=getCurrentRoom(Player.x,Player.y)
+function drawMap(e,cam)
+  local cx,cy=getCurrentRoom(e.x,e.y)
   map(cx,cy,30,17,cx*8+cam.x,cy*8+cam.y,-1,1, function(tile, x, y)
     -- trace(string.format("%d %d", x, y))
-    if isTileRemovable(tile) then
+    if isTileRemoved(tile) then
       return EMPTY_TILE_ID
     end
     if (bonusDir ~= 0) and isTileBonus(x,y) then
       return bonusExpired
     end
+    if not DEBUG_TILES then
+      if isTileSpikeDirFlag(tile) then
+        return tileSky
+      end
+      if isTileBonus(x,y) then
+        return tileBonusCommon
+      end
+      if isTileRemovable(tile) then
+        -- EXTREMELY WTF!!!
+        return 80 + (tile % 2)
+      end
+    end
     return tile
   end)
+end
+
+function animate(e,tex)
+  local anim=tex[e.state]
+  e.sp=anim[(math.floor(ANIM_TICK)%#anim)+1]
+  ANIM_TICK = ANIM_TICK + ANIM_SPEED
+end
+
+function TICGame()
+  cls()
+  updateCam(cam,Player)
   update(Player)
   updateState(Player)
-  local anim=PL_ANIM[Player.state]
-  Player.sp=anim[(math.floor(ANIM_TICK)%#anim)+1]
-  ANIM_TICK = ANIM_TICK + ANIM_SPEED
+  drawMap(Player,cam)
+  animate(Player,PL_ANIM)
   checkChangeRoom(Player)
-  local dir=getSpWallDirInRoom(Player)
-  if dir ~= 0 then
-    local s=SPIKES[dir].e
-    if collide(Player, s) then mode=MOD_FAIL end
-    updateSpikes(s)
-    drawEnt(s,cam)
-  end
+  local dir=getSpWallDirInRoom(getEntRoom(Player))
+  local spWall=updSpikeWall(dir,cam)
   drawEnt(Player,cam)
   -- print(string.format("%g %g %g %g, %g %g| %g", cam.x, cam.y, Player.x, Player.y, Player.x+cam.x, Player.y+cam.y, getSpWallDirInRoom(Player)), 0, 0, 4)
   if isTouchSpikeTiles(Player) then mode=MOD_FAIL end
   if collide(Player, Flag) then mode=MOD_WIN end
+  if spWall ~= nil and collide(Player, spWall) then mode=MOD_FAIL end
 end
 
 MOD_GAME = 0
@@ -515,7 +551,6 @@ TICMode={
 }
 
 init()
-mode=MOD_GAME
 function TIC()
   TICMode[mode]()
 end
