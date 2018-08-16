@@ -133,9 +133,41 @@ end
 function sign(x) return x>0 and 1 or x<0 and -1 or 0 end
 function lerp(a,b,t) return (1-t)*a + t*b end
 
-BTN_UP = 0
-BTN_LEFT = 2
-BTN_RIGHT = 3
+BTN_UP=0
+BTN_LEFT=2
+BTN_RIGHT=3
+BTN_Z=4
+
+btn_st={
+  [BTN_UP]=false,
+  [BTN_LEFT]=false,
+  [BTN_RIGHT]=false,
+  [BTN_Z]=false
+}
+
+function btni(id)
+  if btn(id) then
+    btn_st[id]=true
+    return false
+  elseif btn_st[id] then
+    btn_st[id]=false
+    return true
+  end
+end
+
+function btno(id)
+  if btn(id) then
+    if not btn_st[id] then
+      btn_st[id]=true
+      return true
+    else
+      return false
+    end
+  else
+    btn_st[id]=false
+    return false
+  end
+end
 
 JMP_IMP = 3
 ACCEL = 0.2
@@ -146,6 +178,8 @@ bonus_index = 112
 bonusExpired=116
 spikeFirst=48
 spikeLast=51
+saveTile=16
+savedTile=17
 
 tileSky=1
 tileBonusCommon=117
@@ -191,33 +225,30 @@ SPIKES={
   [TD.R]={e=LSpikes,x=-W-16,y=0,vx=1,vy=0}
 }
 
-speedMulX=0.5
-speedMulY=0.3
+spVxMul=0.5
+spVyMul=0.3
 RoomCount=0
 
 function resetSP(sp,x,y)
   sp.e.x=sp.x+x*8
   sp.e.y=sp.y+y*8
-  sp.e.vx=sp.vx * speedMulX
-  sp.e.vy=sp.vy * speedMulY
+  sp.e.vx=sp.vx*spVxMul
+  sp.e.vy=sp.vy*spVyMul
 end
 
+crx,cry=-1,-1
 function onChangeRoom(e,x,y)
   bonusDir=0
-  local dir=getSpWallDirInRoom(getEntRoom(e))
-  if dir == 0 then return end
-  resetSP(SPIKES[TD.U],x,y)
-  resetSP(SPIKES[TD.D],x,y)
-  resetSP(SPIKES[TD.L],x,y)
-  resetSP(SPIKES[TD.R],x,y)
-  RoomCount=RoomCount+1
+  crx,cry=x,y
+  for i,v in ipairs(SPIKES) do
+    resetSP(v,x,y)
+  end
 end
 
 function diffRoom(x,y)
   return x ~= crx or y ~= cry
 end
 
-crx,cry=-1,-1
 function checkChangeRoom(e)
   local x1,y1=getCurrentRoom(e.x,e.y)
   local x2,y2=getCurrentRoom(e.x+e.cr.w,e.y)
@@ -225,7 +256,7 @@ function checkChangeRoom(e)
   local x4,y4=getCurrentRoom(e.x+e.cr.w,e.y+e.cr.h)
   if diffRoom(x1,y1) and diffRoom(x2,y2) and diffRoom(x3,y3) and diffRoom(x4,y4) then
     onChangeRoom(e,x1,y1)
-    crx,cry=x1,y1
+    RoomCount=RoomCount+1
   end
 end
 
@@ -262,6 +293,10 @@ function isTileRemoved(tileId)
   return bonusDir ~= 0 and has_value(REM_TILE_DIRS[bonusDir], tileId)
 end
 
+function isTileSave(c,r)
+  return mget(c,r)==saveTile
+end
+
 function isTileBonus(x,y)
   return bonus_index <= mget(x,y) and mget(x,y) < bonusExpired
 end
@@ -291,7 +326,7 @@ function handleInput()
   elseif btn(BTN_RIGHT) then
     iv.pos.x = 1
   end
-  if btn(BTN_UP) then
+  if btno(BTN_UP) then
     iv.jump=true
   end
   return iv
@@ -332,6 +367,16 @@ function checkHitBonus(e)
       bonusDir = getBonusDir(c,r)
     end
   end)
+end
+
+function touchSaveTile(e)
+  local tsc,tsr=-1,-1
+  collideTile(vec2(e.x,e.y),e.cr,function (c,r)
+    if isTileSave(c,r) then
+      tsc,tsr=c,r
+    end
+  end)
+  return tsc,tsr
 end
 
 function isOnFloor(e)
@@ -460,6 +505,10 @@ function updateState(e)
   end
 end
 
+SAVE_C=8
+SAVE_R=4
+LIVES=3
+
 function init()
   local cw = W//T
   local ch = H//T
@@ -471,24 +520,58 @@ function init()
   fillRect(RSpikes,1,1,1,ch,SpikeTex.R)
   fillRect(USpikes,1,ch,cw,ch,SpikeTex.U)
   fillRect(DSpikes,1,1,cw,1,SpikeTex.D)
-  Player.x=8*8
-  Player.y=4*8
-  spikeDir=0
-  mode=MOD_GAME
+  mode=MOD_LOGO
+end
+
+function initGame()
+  Player.x=SAVE_C*T
+  Player.y=SAVE_R*T
+  Player.vx=0
+  Player.vy=0
+  local x,y=getCurrentRoom(Player.x,Player.y)
+  onChangeRoom(Player,x,y)
+end
+
+function initFail()
+  LIVES=LIVES-1
+end
+
+function TICLogo()
+  cls()
+  spr(336, 88, 24, -1, 8)
+  print("CAT_IN_THE_DARK", 72, 108, 4)
+  if btni(BTN_Z) then mode=MOD_START end
 end
 
 function TICFail()
+  mode=MOD_START
+end
+
+function TICStart()
+  cls()
+  if LIVES < 0 then
+    mode=MOD_GAMEOVER
+    return
+  end
+  spr(256, 120, 64)
+  spr(272, 120, 72)
+  print(string.format("x %d", LIVES), 132, 68)
+  print("-Press Z to start!-", W/2-64, H/2+16, 4)
+  if btni(BTN_Z) then mode=MOD_GAME end
+end
+
+function TICGameOver()
   cls()
   print("Game over!", W/2-40, H/2, 4)
   print("-Press Z to restart!-", W/2-64, H/2+16, 4)
-  if btn(4) then reset() end
+  if btni(BTN_Z) then reset() end
 end
 
 function TICWin()
   cls()
   print("You win!", W/2-32,H/2,4)
   print("-Press Z to restart-", W/2-64, H/2+16, 4)
-  if btn(4) then reset() end
+  if btni(BTN_Z) then reset() end
 end
 
 function drawMap(e,cam)
@@ -497,6 +580,11 @@ function drawMap(e,cam)
     -- trace(string.format("%d %d", x, y))
     if isTileRemoved(tile) then
       return EMPTY_TILE_ID
+    end
+    if isTileSave(x,y) then
+      if SAVE_C==x and SAVE_R==y then
+        return savedTile
+      end
     end
     if (bonusDir ~= 0) and isTileBonus(x,y) then
       return bonusExpired
@@ -535,22 +623,47 @@ function TICGame()
   local spWall=updSpikeWall(dir,cam)
   drawEnt(Player,cam)
   -- print(string.format("%g %g %g %g, %g %g| %g", cam.x, cam.y, Player.x, Player.y, Player.x+cam.x, Player.y+cam.y, getSpWallDirInRoom(Player)), 0, 0, 4)
+  local stc,str=touchSaveTile(Player)
+  trace(string.format("%d %d", stc,str))
+  if stc > 0 and str > 0 then
+    trace("touch save!")
+    SAVE_C,SAVE_R=stc,str
+  end
   if isTouchSpikeTiles(Player) then mode=MOD_FAIL end
   if collide(Player, Flag) then mode=MOD_WIN end
-  if spWall ~= nil and collide(Player, spWall) then mode=MOD_FAIL end
+  if spWall ~= nil and collide(Player, spWall) then mode=MOD_FAIL
+  end
 end
 
 MOD_GAME = 0
 MOD_FAIL = 1
 MOD_WIN=2
+MOD_LOGO=3
+MOD_GAMEOVER=4
+MOD_START=5
 
 TICMode={
   [MOD_GAME]=TICGame,
   [MOD_FAIL]=TICFail,
-  [MOD_WIN]=TICWin
+  [MOD_WIN]=TICWin,
+  [MOD_LOGO]=TICLogo,
+  [MOD_GAMEOVER]=TICGameOver,
+  [MOD_START]=TICStart
+}
+
+inits={
+  [MOD_GAME]=initGame,
+  [MOD_FAIL]=initFail
 }
 
 init()
+oldMode=mode
 function TIC()
+  if oldMode ~= mode then
+    if inits[mode] ~= nil then
+      inits[mode]()
+    end
+    oldMode=mode
+  end
   TICMode[mode]()
 end
