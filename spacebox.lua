@@ -7,7 +7,10 @@ T=8
 W=240
 H=136
 EMPTY_TILE_ID=1
-DEBUG_TILES=true
+DEBUG_TILES=false
+SAVE_C=132
+SAVE_R=18
+LIVES=3
 
 ST={
   SL=1,
@@ -78,6 +81,46 @@ local function has_value (tab, val)
   end
   return false
 end
+
+
+
+LOGO1={
+  x=0,
+  y=0,
+  sp={{1,1,1,312,313,314,315,316,317,318},
+  {1,1,327,328,329,330,331,332,333,334},
+  {341,342,343,344,345,346,347,348,349,1},
+  {357,358,359,360,361,362,363,364,365,366},
+  {373,374,375,376,377,378,379,380,381,382},
+  {389,390,391,392,393,394,395,396,397,398},
+  {405,406,407,408,409,410,411,412,413,1}}
+}
+LOGO2={
+  x=0,
+  y=0,
+  sp={{421,422,423,424,425,426,427},
+  {437,438,439,440,441,442,1},
+  {453,454,455,456,457,1,1},
+  {469,470,471,472,473,474,1}}
+}
+LOGO3={
+  x=0,
+  y=0,
+  sp={{486,487,488,1,490,491}}
+}
+LOGO4={
+  x=0,
+  y=0,
+  sp={{368,369,370,1,1},
+  {384,385,386,387,388},
+  {400,401,402,1,1},
+  {416,417,418,419,420},
+  {432,433,434,1,1},
+  {448,449,450,451,452},
+  {464,465,466,467,1},
+  {480,481,482,483,484},
+  {496,497,498,499,1}}
+}
 
 LSpikes = {
   x=0,
@@ -196,12 +239,16 @@ SPIKE_WALL_DIRS={
   [2]=TD.D,
   [3]=TD.L,
   [4]=TD.U,
-  [5]=TD.R
+  [5]=TD.R,
+  [96]=TD.D,
+  [97]=TD.L,
+  [98]=TD.U,
+  [99]=TD.R
 }
 SP_WALL_DIR_TILE_OFFSET = vec2(2,2)
 
 function isTileSpikeDirFlag(tileId)
-  return tileId >= 2 and tileId <= 5
+  return (tileId >= 2 and tileId <= 5) or (tileId >= 96 and tileId <= 99)
 end
 
 function getCurrentRoom(x,y)
@@ -226,7 +273,7 @@ SPIKES={
 }
 
 spVxMul=0.5
-spVyMul=0.3
+spVyMul=0.25
 RoomCount=0
 
 function resetSP(sp,x,y)
@@ -469,8 +516,8 @@ end
 function updSpikeWall(dir,cam)
   if dir ~= 0 then
     local s=SPIKES[dir].e
-    if math.abs(s.x)-0.2 >= 0 then s.x=s.x+s.vx end
-    if math.abs(s.y)-0.2 >= 0 then s.y=s.y+s.vy end
+    s.x=s.x+s.vx
+    s.y=s.y+s.vy
     drawEnt(s,cam)
     return s
   end
@@ -505,10 +552,6 @@ function updateState(e)
   end
 end
 
-SAVE_C=8
-SAVE_R=4
-LIVES=3
-
 function init()
   local cw = W//T
   local ch = H//T
@@ -536,11 +579,14 @@ function initFail()
   LIVES=LIVES-1
 end
 
+LOGO_TO=0
 function TICLogo()
   cls()
   spr(336, 88, 24, -1, 8)
   print("CAT_IN_THE_DARK", 72, 108, 4)
-  if btni(BTN_Z) then mode=MOD_START end
+  LOGO_TO=LOGO_TO+1
+  if btni(BTN_Z) then mode=MOD_INTRO end
+  if LOGO_TO > 60 then mode=MOD_INTRO end
 end
 
 function TICFail()
@@ -577,7 +623,6 @@ end
 function drawMap(e,cam)
   local cx,cy=getCurrentRoom(e.x,e.y)
   map(cx,cy,30,17,cx*8+cam.x,cy*8+cam.y,-1,1, function(tile, x, y)
-    -- trace(string.format("%d %d", x, y))
     if isTileRemoved(tile) then
       return EMPTY_TILE_ID
     end
@@ -591,7 +636,7 @@ function drawMap(e,cam)
     end
     if not DEBUG_TILES then
       if isTileSpikeDirFlag(tile) then
-        return tileSky
+        return tile < 80 and tileSky or 80
       end
       if isTileBonus(x,y) then
         return tileBonusCommon
@@ -611,6 +656,36 @@ function animate(e,tex)
   ANIM_TICK = ANIM_TICK + ANIM_SPEED
 end
 
+function printOut(text,x,y,clr,oclr,s)
+  print(text,x-1,y,oclr,false,s)
+  print(text,x+1,y,oclr,false,s)
+  print(text,x,y-1,oclr,false,s)
+  print(text,x,y+1,oclr,false,s)
+  print(text,x,y,clr,false,s)
+end
+
+interval=10
+ct=0
+st=false
+function TICIntro()
+  cls()
+  map(210, 119, 30, 17)
+  drawEnt(LOGO1,vec2(112,32))
+  drawEnt(LOGO2,vec2(112,88))
+  drawEnt(LOGO3,vec2(120,120))
+  drawEnt(LOGO4,vec2(24,64))
+  printOut("SPACE", 24, 10, 9, 1, 3)
+  printOut("BOX", 24, 34, 9, 1, 5)
+  if st then
+    printOut("Press Z to start", 80, 120, 4, 1, 1)
+  end
+  ct=ct+1
+  if ct % interval == 0 then
+    st = not st
+  end
+  if btni(BTN_Z) then mode=MOD_START end
+end
+
 function TICGame()
   cls()
   updateCam(cam,Player)
@@ -624,9 +699,7 @@ function TICGame()
   drawEnt(Player,cam)
   -- print(string.format("%g %g %g %g, %g %g| %g", cam.x, cam.y, Player.x, Player.y, Player.x+cam.x, Player.y+cam.y, getSpWallDirInRoom(Player)), 0, 0, 4)
   local stc,str=touchSaveTile(Player)
-  trace(string.format("%d %d", stc,str))
   if stc > 0 and str > 0 then
-    trace("touch save!")
     SAVE_C,SAVE_R=stc,str
   end
   if isTouchSpikeTiles(Player) then mode=MOD_FAIL end
@@ -641,6 +714,7 @@ MOD_WIN=2
 MOD_LOGO=3
 MOD_GAMEOVER=4
 MOD_START=5
+MOD_INTRO=6
 
 TICMode={
   [MOD_GAME]=TICGame,
@@ -648,7 +722,8 @@ TICMode={
   [MOD_WIN]=TICWin,
   [MOD_LOGO]=TICLogo,
   [MOD_GAMEOVER]=TICGameOver,
-  [MOD_START]=TICStart
+  [MOD_START]=TICStart,
+  [MOD_INTRO]=TICIntro
 }
 
 inits={
