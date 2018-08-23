@@ -8,9 +8,13 @@ W=240
 H=136
 EMPTY_TILE_ID=1
 DEBUG_TILES=false
-SAVE_C=132
-SAVE_R=18
+SAVE_C=2
+SAVE_R=2
 LIVES=3
+
+JMP_IMP=2.8
+ACCEL=0.2
+OVERJMP_ACC=0.1
 
 ST={
   SL=1,
@@ -39,7 +43,7 @@ end
 Player = {
   x=0,
   y=0,
-  cr={x=0,y=0,w=8,h=16},
+  cr={x=1,y=0,w=6,h=16},
   vx=0,
   vy=0,
   rigid=true,
@@ -212,9 +216,6 @@ function btno(id)
   end
 end
 
-JMP_IMP = 3
-ACCEL = 0.2
-
 transparent_sprites_index = 0
 solid_sprites_index = 80
 bonus_index = 112
@@ -267,7 +268,7 @@ end
 
 SPIKES={
   [TD.U]={e=DSpikes,x=0,y=H,vx=0,vy=-1},
-  [TD.D]={e=USpikes,x=0,y=-H,vx=0,vy=1},
+  [TD.D]={e=USpikes,x=0,y=-H-16,vx=0,vy=1},
   [TD.L]={e=RSpikes,x=W+16,y=0,vx=-1,vy=0},
   [TD.R]={e=LSpikes,x=-W-16,y=0,vx=1,vy=0}
 }
@@ -299,8 +300,8 @@ end
 function checkChangeRoom(e)
   local x1,y1=getCurrentRoom(e.x,e.y)
   local x2,y2=getCurrentRoom(e.x+e.cr.w,e.y)
-  local x3,y3=getCurrentRoom(e.x,e.y+e.cr.h)
-  local x4,y4=getCurrentRoom(e.x+e.cr.w,e.y+e.cr.h)
+  local x3,y3=getCurrentRoom(e.x,e.y+e.cr.h-1)
+  local x4,y4=getCurrentRoom(e.x+e.cr.w,e.y+e.cr.h-1)
   if diffRoom(x1,y1) and diffRoom(x2,y2) and diffRoom(x3,y3) and diffRoom(x4,y4) then
     onChangeRoom(e,x1,y1)
     RoomCount=RoomCount+1
@@ -338,6 +339,26 @@ end
 
 function isTileRemoved(tileId)
   return bonusDir ~= 0 and has_value(REM_TILE_DIRS[bonusDir], tileId)
+end
+
+TAKEN_HEARTS={}
+
+tileHeart=18
+function isTileHeart(c,r)
+  return mget(c,r)==tileHeart
+end
+
+function isHeartTaken(c,r)
+  for i,v in ipairs(TAKEN_HEARTS) do
+    if v.x == c and v.y == r then return true end
+  end
+  return false
+end
+
+function takeHeart(c,r)
+  if not isHeartTaken(c,r) then
+    table.insert(TAKEN_HEARTS, (vec2(c,r)))
+  end
 end
 
 function isTileSave(c,r)
@@ -426,8 +447,18 @@ function touchSaveTile(e)
   return tsc,tsr
 end
 
+function touchTile(e, id)
+  local tc,tr=-1,-1
+  collideTile(vec2(e.x,e.y),e.cr,function (c,r)
+    if mget(c,r) == id then
+      tc,tr=c,r
+    end
+  end)
+  return tc,tr
+end
+
 function isOnFloor(e)
-  return not CanMove(vec2(e.x,e.y+1),e.cr)
+  return not CanMove(vec2(e.x,e.y+1),e.cr) and e.vy >= 0
 end
 
 function isUnderCeiling(e)
@@ -446,31 +477,25 @@ end
 
 function TryMoveBy(e,dp)
   local pos=vec2(e.x, e.y)
-  CM = ""
   if (e.rigid) then
-    if dp.x ~= 0 then
-      for i=dp.x,sign(dp.x),-1*sign(dp.x) do
-        if CanMove(vec2(e.x+i,e.y),e.cr) then
-          e.x=e.x+i
-          break
-        end
-      end
-    end
-    if dp.y ~= 0 then
-      if CanMove(vec2(e.x,e.y+dp.y),e.cr) then
-        e.y=e.y+dp.y
-      else
-        moveby=0
-        for i=0,math.ceil(dp.y),sign(dp.y) do
-          if CanMove(vec2(e.x,e.y+i),e.cr) then
-            moveby=i
+    local dx,dy=0,0
+    for i=0,math.ceil(dp.y),sign(dp.y) do
+      if dx == 0 then
+        for j=0,math.ceil(dp.x),sign(dp.x) do
+          if CanMove(vec2(e.x+j,e.y+i),e.cr) and dp.x~=0 then
+            dx=j
           else
             break
           end
         end
-        e.y=e.y+moveby
       end
+      if CanMove(vec2(e.x+dx,e.y+i),e.cr) and dp.y ~= 0 then
+        dy=i
+      end
+      if dp.y==0 then break end
     end
+    e.x=e.x+dx
+    e.y=e.y+dy
   else
     e.x=e.x+dp.x
     e.y=e.y+dp.y
@@ -488,9 +513,14 @@ function update(e)
       end
     elseif isUnderCeiling(e) and e.vy < 0 then
       e.vy=0
+    elseif btn(BTN_UP) and e.vy < 0 then
+      e.vy=e.vy+OVERJMP_ACC
     else
-      e.vy = e.vy + ACCEL
+      e.vy = e.vy+ACCEL
     end
+  end
+  if e.vx ~= 0 then
+
   end
   e.vx=iv.pos.x
   local dp=vec2(e.vx, e.vy)
@@ -599,10 +629,10 @@ function TICStart()
     mode=MOD_GAMEOVER
     return
   end
-  spr(256, 120, 64)
-  spr(272, 120, 72)
-  print(string.format("x %d", LIVES), 132, 68)
-  print("-Press Z to start!-", W/2-64, H/2+16, 4)
+  spr(256, 108, 64)
+  spr(272, 108, 72)
+  print(string.format("x %d", LIVES), 120, 68)
+  print("-Press Z to start!-", 68, 96, 4)
   if btni(BTN_Z) then mode=MOD_GAME end
 end
 
@@ -621,14 +651,18 @@ function TICWin()
 end
 
 function drawMap(e,cam)
-  local cx,cy=getCurrentRoom(e.x,e.y)
-  map(cx,cy,30,17,cx*8+cam.x,cy*8+cam.y,-1,1, function(tile, x, y)
+  map(crx,cry,30,17,crx*8+cam.x,cry*8+cam.y,-1,1, function(tile, x, y)
     if isTileRemoved(tile) then
       return EMPTY_TILE_ID
     end
     if isTileSave(x,y) then
       if SAVE_C==x and SAVE_R==y then
         return savedTile
+      end
+    end
+    if isTileHeart(x,y) then
+      if isHeartTaken(x,y) then
+        return EMPTY_TILE_ID
       end
     end
     if (bonusDir ~= 0) and isTileBonus(x,y) then
@@ -648,6 +682,10 @@ function drawMap(e,cam)
     end
     return tile
   end)
+end
+
+function drawHud()
+  printOut(string.format("Room %d-%d", crx/30, cry/17), 4, 4, 9, 1, 1)
 end
 
 function animate(e,tex)
@@ -686,7 +724,9 @@ function TICIntro()
   if btni(BTN_Z) then mode=MOD_START end
 end
 
+GT=0
 function TICGame()
+  GT=GT+1
   cls()
   updateCam(cam,Player)
   update(Player)
@@ -694,13 +734,20 @@ function TICGame()
   drawMap(Player,cam)
   animate(Player,PL_ANIM)
   checkChangeRoom(Player)
-  local dir=getSpWallDirInRoom(getEntRoom(Player))
+  local dir=getSpWallDirInRoom(crx,cry)
   local spWall=updSpikeWall(dir,cam)
   drawEnt(Player,cam)
-  -- print(string.format("%g %g %g %g, %g %g| %g", cam.x, cam.y, Player.x, Player.y, Player.x+cam.x, Player.y+cam.y, getSpWallDirInRoom(Player)), 0, 0, 4)
+  drawHud()
   local stc,str=touchSaveTile(Player)
   if stc > 0 and str > 0 then
     SAVE_C,SAVE_R=stc,str
+  end
+  local sc,sr=touchTile(Player, tileHeart)
+  if sc > 0 and sr > 0 then
+    if not isHeartTaken(sc,sr) then
+      LIVES = LIVES + 1
+      takeHeart(sc,sr)
+    end
   end
   if isTouchSpikeTiles(Player) then mode=MOD_FAIL end
   if collide(Player, Flag) then mode=MOD_WIN end
